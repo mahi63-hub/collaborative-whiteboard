@@ -21,6 +21,18 @@ function api(path, options = {}) {
   });
 }
 
+async function ensureSession() {
+  const session = await api("/api/auth/session");
+  if (session.ok) {
+    return true;
+  }
+  const login = await api("/api/auth/test-login", {
+    method: "POST",
+    body: JSON.stringify({ email: "testuser@example.com", name: "Test User" })
+  });
+  return login.ok;
+}
+
 function App() {
   const path = window.location.pathname;
   if (path.startsWith("/board/")) {
@@ -258,6 +270,12 @@ function Board({ boardId }) {
   }
 
   async function save() {
+    setStatus("Saving");
+    const ready = await ensureSession();
+    if (!ready) {
+      setStatus("Login needed");
+      return;
+    }
     const res = await api(`/api/boards/${boardId}`, {
       method: "POST",
       body: JSON.stringify({ objects: objectsRef.current })
@@ -286,14 +304,27 @@ function Board({ boardId }) {
   }, []);
 
   React.useEffect(() => {
-    api(`/api/boards/${boardId}`)
+    ensureSession()
+      .then((ready) => {
+        if (!ready) {
+          setStatus("Login needed");
+          return null;
+        }
+        return api(`/api/boards/${boardId}`);
+      })
       .then(async (res) => {
+        if (!res) {
+          return { objects: [] };
+        }
         if (!res.ok) {
           return { objects: [] };
         }
         return res.json();
       })
-      .then((data) => sync(data.objects || []));
+      .then((data) => {
+        sync(data.objects || []);
+        setStatus("Loaded");
+      });
   }, [boardId]);
 
   React.useEffect(() => {
@@ -349,7 +380,7 @@ function Board({ boardId }) {
             {users.map((user) => <li key={user.id}>{user.name}</li>)}
           </ul>
         </section>
-        <p className="status">{status} · {objects.length} objects</p>
+        <p className="status">{status} | {objects.length} objects</p>
       </aside>
       <section className="canvas-wrap">
         <canvas
