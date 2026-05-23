@@ -6,6 +6,7 @@ import http from "http";
 import { Server } from "socket.io";
 import { router } from "./routes.js";
 import { setupSocket } from "./socket.js";
+import { initDb } from "./db.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -33,6 +34,13 @@ const io = new Server(server, {
 
 setupSocket(io);
 
-server.listen(port, () => {
-  console.log(`Backend listening on ${port}`);
-});
+initDb()
+  .then(() => {
+    server.listen(port, () => {
+      console.log(`Backend listening on ${port}`);
+    });
+  })
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });

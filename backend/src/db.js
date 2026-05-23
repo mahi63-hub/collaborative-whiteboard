@@ -11,6 +11,30 @@ export async function query(text, params = []) {
   return result;
 }
 
+export async function initDb() {
+  await query("CREATE EXTENSION IF NOT EXISTS pgcrypto");
+  await query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      google_id TEXT UNIQUE,
+      name TEXT NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      image TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await query(`
+    CREATE TABLE IF NOT EXISTS boards (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      owner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      objects JSONB NOT NULL DEFAULT '[]'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await query("CREATE INDEX IF NOT EXISTS boards_owner_id_idx ON boards(owner_id)");
+}
+
 export async function upsertUser({ googleId, name, email, image }) {
   const result = await query(
     `INSERT INTO users (google_id, name, email, image)
