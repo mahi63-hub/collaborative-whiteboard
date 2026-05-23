@@ -1,4 +1,5 @@
 import pg from "pg";
+import crypto from "crypto";
 
 const { Pool } = pg;
 
@@ -25,13 +26,14 @@ export async function initDb() {
   `);
   await query(`
     CREATE TABLE IF NOT EXISTS boards (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      id TEXT PRIMARY KEY,
       owner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       objects JSONB NOT NULL DEFAULT '[]'::jsonb,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  await query("ALTER TABLE boards ALTER COLUMN id TYPE TEXT USING id::text");
   await query("CREATE INDEX IF NOT EXISTS boards_owner_id_idx ON boards(owner_id)");
 }
 
@@ -48,20 +50,23 @@ export async function upsertUser({ googleId, name, email, image }) {
 }
 
 export async function createBoard(ownerId) {
+  const boardId = crypto.randomUUID();
   const result = await query(
-    "INSERT INTO boards (owner_id, objects) VALUES ($1, $2) RETURNING id",
-    [ownerId, JSON.stringify([])]
+    "INSERT INTO boards (id, owner_id, objects) VALUES ($1, $2, $3) RETURNING id",
+    [boardId, ownerId, JSON.stringify([])]
   );
   return result.rows[0].id;
 }
 
 export async function saveBoard(boardId, ownerId, objects) {
   const result = await query(
-    `UPDATE boards
-     SET objects = $1, updated_at = NOW()
-     WHERE id = $2 AND owner_id = $3
+    `INSERT INTO boards (id, owner_id, objects)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (id)
+     DO UPDATE SET objects = EXCLUDED.objects, updated_at = NOW()
+     WHERE boards.owner_id = EXCLUDED.owner_id
      RETURNING id`,
-    [JSON.stringify(objects), boardId, ownerId]
+    [boardId, ownerId, JSON.stringify(objects)]
   );
   return result.rows[0];
 }
