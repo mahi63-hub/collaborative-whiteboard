@@ -111,6 +111,8 @@ function Board({ boardId }) {
   const activeRef = React.useRef(null);
   const undoRef = React.useRef([]);
   const redoRef = React.useRef([]);
+  const saveTimerRef = React.useRef(null);
+  const saveNowRef = React.useRef(null);
   const [objects, setObjects] = React.useState([]);
   const [tool, setTool] = React.useState("pen");
   const [color, setColor] = React.useState("#2563eb");
@@ -129,6 +131,13 @@ function Board({ boardId }) {
     undoRef.current = [...undoRef.current, object];
     redoRef.current = [];
     sync([...objectsRef.current, object]);
+  }
+
+  function queueSave() {
+    clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      saveNowRef.current?.();
+    }, 350);
   }
 
   function upsertObject(object) {
@@ -245,6 +254,7 @@ function Board({ boardId }) {
     } else {
       socketRef.current?.emit("addObject", active);
     }
+    queueSave();
   }
 
   function undo() {
@@ -256,6 +266,7 @@ function Board({ boardId }) {
     redoRef.current = [...redoRef.current, last];
     sync(objectsRef.current.filter((item) => item.id !== last.id));
     socketRef.current?.emit("removeObject", { objectId: last.id });
+    queueSave();
   }
 
   function redo() {
@@ -267,6 +278,7 @@ function Board({ boardId }) {
     undoRef.current = [...undoRef.current, restored];
     sync([...objectsRef.current, restored]);
     socketRef.current?.emit("restoreObject", restored);
+    queueSave();
   }
 
   async function save() {
@@ -288,6 +300,14 @@ function Board({ boardId }) {
     return () => {
       delete window.getCanvasAsJSON;
     };
+  }, []);
+
+  React.useEffect(() => {
+    saveNowRef.current = save;
+  });
+
+  React.useEffect(() => {
+    return () => clearTimeout(saveTimerRef.current);
   }, []);
 
   React.useEffect(() => {
@@ -372,7 +392,7 @@ function Board({ boardId }) {
             <button data-testid="undo-button" onClick={undo}>Undo</button>
             <button data-testid="redo-button" onClick={redo}>Redo</button>
           </div>
-          <button onClick={save}>Save</button>
+          <button className="save-button" onClick={save}>{status === "Saving" ? "Saving..." : "Save"}</button>
         </div>
         <section>
           <h2>Users</h2>
